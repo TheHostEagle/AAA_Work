@@ -1,3 +1,6 @@
+go
 module automarket
 
-go 1.27.1
+go 1.21
+
+require github.com/gin-gonic/gin v1.9.1
