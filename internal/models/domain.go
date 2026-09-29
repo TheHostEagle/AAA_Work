@@ -1,4 +1,3 @@
-go
 package models
 
 type User struct {
@@ -30,4 +29,6 @@ type AuditLog struct {
 	Method         string `json:"method"`
 	Endpoint       string `json:"endpoint"`
 	StatusResponse int    `json:"status_response"`
+	PrevHash       string `json:"prev_hash"`
+	Hash           string `json:"hash"`
 }
