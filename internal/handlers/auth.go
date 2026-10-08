@@ -16,7 +16,6 @@ func RegisterHandler(store *storage.Store) gin.HandlerFunc {
 			Name     string `json:"name"`
 			Email    string `json:"email"`
 			Password string `json:"password"`
-			Role     string `json:"role"`
 		}
 
 		if err := c.ShouldBindJSON(&input); err != nil {
@@ -45,11 +44,7 @@ func RegisterHandler(store *storage.Store) gin.HandlerFunc {
 			Name:         input.Name,
 			Email:        input.Email,
 			PasswordHash: passwordHash,
-			Role:         input.Role,
-		}
-
-		if user.Role == "" {
-			user.Role = "vendedor"
+			Role:         "vendedor",
 		}
 
 		if err := store.CreateUser(&user); err != nil {
@@ -58,6 +53,9 @@ func RegisterHandler(store *storage.Store) gin.HandlerFunc {
 			})
 			return
 		}
+
+		c.Set("userID", user.ID)
+		c.Set("userRole", user.Role)
 
 		c.JSON(http.StatusCreated, gin.H{
 			"message": "usuario creado",
@@ -112,6 +110,9 @@ func LoginHandler(store *storage.Store, tokenStore *security.TokenStore) gin.Han
 			})
 			return
 		}
+
+		c.Set("userID", user.ID)
+		c.Set("userRole", user.Role)
 
 		c.JSON(http.StatusOK, gin.H{
 			"message": "login correcto",

@@ -19,14 +19,14 @@ func main() {
 
 	tokenStore := security.NewTokenStore()
 
-	r.Use(middleware.AccountingMiddleware())
+	r.Use(middleware.AccountingMiddleware(store))
 
 	api := r.Group("/api")
 	{
 		api.POST("/auth/register", handlers.RegisterHandler(store))
 		api.POST("/auth/login", handlers.LoginHandler(store, tokenStore))
 
-		api.GET("/vehicles", handlers.GetPublicVehiclesHandler)
+		api.GET("/vehicles", handlers.GetPublicVehiclesHandler(store))
 
 		venderGroup := api.Group("/vehicles")
 		venderGroup.Use(middleware.AuthenticationMiddleware(tokenStore))
@@ -39,9 +39,12 @@ func main() {
 		adminGroup.Use(middleware.AuthenticationMiddleware(tokenStore))
 		adminGroup.Use(middleware.AuthorizationMiddleware(store, "administrador"))
 		{
-			adminGroup.PUT("/vehicles/:id/approve", handlers.ApproveVehicleHandler)
-			adminGroup.DELETE("/:id", handlers.DeleteVehicleHandler)
-			adminGroup.DELETE("/users/:id", handlers.DeleteUserHandler)
+			adminGroup.PUT("/vehicles/:id/approve", handlers.ApproveVehicleHandler(store))
+			adminGroup.DELETE("/vehicles/:id", handlers.DeleteVehicleHandler(store))
+			adminGroup.DELETE("/users/:id", handlers.DeleteUserHandler(store))
 		}
+	}
+	if err := r.Run(":8080"); err != nil {
+		panic(err)
 	}
 }

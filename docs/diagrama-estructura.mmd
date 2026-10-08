@@ -1,0 +1,25 @@
+flowchart TD
+    Cliente["Cliente HTTP"]
+    Gin["Router Gin<br/>cmd/server/main.go"]
+    Publico["GET /api/vehicles<br/>sin autenticación"]
+    Auth["Middleware de autenticación"]
+    Rol["Middleware de autorización<br/>rol administrador"]
+    Aprobar["PUT /api/admin/vehicles/:id/approve"]
+    BorrarVehiculo["DELETE /api/admin/vehicles/:id"]
+    BorrarUsuario["DELETE /api/admin/users/:id"]
+    Store["Store<br/>internal/storage"]
+    Vehiculos["vehicles.json"]
+    Usuarios["users.json"]
+
+    Cliente --> Gin
+    Gin --> Publico
+    Gin --> Auth --> Rol
+    Rol --> Aprobar
+    Rol --> BorrarVehiculo
+    Rol --> BorrarUsuario
+    Publico --> Store
+    Aprobar --> Store
+    BorrarVehiculo --> Store
+    BorrarUsuario --> Store
+    Store --> Vehiculos
+    Store --> Usuarios
