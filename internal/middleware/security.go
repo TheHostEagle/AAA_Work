@@ -1,9 +1,11 @@
 package middleware
 
 import (
+	"log"
 	"net/http"
 	"strings"
 
+	"automarket/internal/models"
 	"automarket/internal/security"
 	"automarket/internal/storage"
 
@@ -111,16 +113,40 @@ func AuthorizationMiddleware(
 		}
 
 		// 5. El usuario tiene permiso.
+		c.Set("userRole", user.Role)
 		c.Next()
 	}
 }
 
-// AccountingMiddleware registrará de forma trazable
-// las operaciones.
-func AccountingMiddleware() gin.HandlerFunc {
+// AccountingMiddleware registra cada petición después de conocer su resultado.
+func AccountingMiddleware(store *storage.Store) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Next()
 
-		// La auditoría la implementaremos después.
+		entry := models.AuditLog{
+			ActorID:        "anonimo",
+			ActorRole:      "visitante",
+			Method:         c.Request.Method,
+			Endpoint:       c.Request.URL.Path,
+			StatusResponse: c.Writer.Status(),
+		}
+
+		if userIDValue, exists := c.Get("userID"); exists {
+			if userID, ok := userIDValue.(string); ok {
+				entry.ActorID = userID
+				entry.ActorRole = "desconocido"
+				if roleValue, hasRole := c.Get("userRole"); hasRole {
+					if role, ok := roleValue.(string); ok {
+						entry.ActorRole = role
+					}
+				} else if user, err := store.GetUserByID(userID); err == nil {
+					entry.ActorRole = user.Role
+				}
+			}
+		}
+
+		if err := store.SaveAuditLog(&entry); err != nil {
+			log.Printf("no se pudo guardar el registro de auditoría: %v", err)
+		}
 	}
 }
