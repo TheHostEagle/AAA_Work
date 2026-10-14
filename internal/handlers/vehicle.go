@@ -46,7 +46,7 @@ func GetPublicVehiclesHandler(store *storage.Store) gin.HandlerFunc {
 	}
 }
 
-//Registrar una publicación nueva como "pendiente" y asociarla al vendedor autenticado.
+//CreateVehicleHandler permite registrar una publicación nueva como "pendiente" y asociarla al vendedor autenticado.
 func CreateVehicleHandler(store *storage.Store) gin.HandlerFunc {
 	return func(c *gin.Context){
 		var input struct {
@@ -94,6 +94,7 @@ func CreateVehicleHandler(store *storage.Store) gin.HandlerFunc {
 	}
 }
 
+// MarkVehicleAsSoldHandler permite al vendedor dueño reportar la venta de una publicación que ya está disponible publicamente
 func MarkVehicleAsSoldHandler(store *storage.Store) gin.HandlerFunc {
 	return func (c *gin.Context) {
 		vehicle, err := store.GetVehicle(c.Param("id"))
