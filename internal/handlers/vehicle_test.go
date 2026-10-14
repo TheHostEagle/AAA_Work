@@ -90,7 +90,6 @@ func TestGetPublicVehiclesHandlerReturnsEmptyArray(t *testing.T) {
 	
 }
 
-//pruebas - integrante 4
 
 func asUser(userID string) gin.HandlerFunc {
 	return func(c *gin.Context) {

@@ -66,7 +66,7 @@ func CreateVehicleHandler(store *storage.Store) gin.HandlerFunc {
 
 		if input.Title == "" || input.Brand == "" || input.Model == "" || input.Price <= 0 {	
 			c.JSON(http.StatusBadRequest, gin.H{
-				"error": "todos los campos son obligatorios y el precio debe ser mayor a cero",
+				"error": "título, marca, modelo y precio (mayor a cero) son obligatorios",
 			})
 			return
 		}
