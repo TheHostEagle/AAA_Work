@@ -3,13 +3,11 @@ package security
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"errors"
 	"sync"
 )
 
 const tokenBytes = 32
 
-var ErrInvalidToken = errors.New("token inválido")
 
 // TokenStore guarda qué usuario pertenece a cada token.
 type TokenStore struct {
@@ -58,12 +56,4 @@ func (s *TokenStore) GetUserID(token string) (string, bool) {
 	userID, ok := s.tokens[token]
 
 	return userID, ok
-}
-
-// Delete elimina un token del almacén.
-func (s *TokenStore) Delete(token string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	delete(s.tokens, token)
 }

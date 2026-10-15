@@ -54,3 +54,24 @@ func TestFlujo(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestDeleteUserRemovesTheirVehicles(t *testing.T) {
+	st, err := New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	u := models.User{Name: "Ana", Email: "a@a.com", PasswordHash: "x", Role: "vendedor"}
+	if err := st.CreateUser(&u); err != nil {
+		t.Fatal(err)
+	}
+	v := models.Vehicle{SellerID: u.ID, Title: "Koleos", Price: 1}
+	if err := st.CreateVehicle(&v); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.DeleteUser(u.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.GetVehicle(v.ID); err != ErrNotFound {
+		t.Fatalf("el vehículo del usuario eliminado sigue disponible: %v", err)
+	}
+}

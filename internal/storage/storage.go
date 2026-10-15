@@ -96,6 +96,16 @@ func (s *Store) DeleteUser(id string) error {
 	defer s.mu.Unlock()
 	for i, u := range s.users {
 		if u.ID == id {
+			remaining := []models.Vehicle{}
+			for _, v := range s.vehicles {
+				if v.SellerID != id {
+					remaining = append(remaining, v)
+				}
+			}
+			s.vehicles = remaining
+			if err := s.save("vehicles.json", s.vehicles); err != nil {
+				return err
+			}
 			s.users = append(s.users[:i], s.users[i+1:]...)
 			return s.save("users.json", s.users)
 		}

@@ -28,11 +28,12 @@ func main() {
 
 		api.GET("/vehicles", handlers.GetPublicVehiclesHandler(store))
 
-		venderGroup := api.Group("/vehicles")
-		venderGroup.Use(middleware.AuthenticationMiddleware(tokenStore))
+		sellerGroup := api.Group("/vehicles")
+		sellerGroup.Use(middleware.AuthenticationMiddleware(tokenStore))
+		sellerGroup.Use(middleware.AuthorizationMiddleware(store, "vendedor"))
 		{
-			venderGroup.POST("", handlers.CreateVehicleHandler)
-			venderGroup.PUT("/:id/sold", handlers.MarkVehicleAsSoldHandler)
+			sellerGroup.POST("", handlers.CreateVehicleHandler(store))
+			sellerGroup.PUT("/:id/sold", handlers.MarkVehicleAsSoldHandler(store))
 		}
 
 		adminGroup := api.Group("/admin")

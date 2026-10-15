@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 
 	"automarket/internal/models"
@@ -25,9 +26,9 @@ func RegisterHandler(store *storage.Store) gin.HandlerFunc {
 			return
 		}
 
-		if input.Email == "" || input.Password == "" {
+		if input.Name == "" || input.Email == "" || input.Password == "" {
 			c.JSON(http.StatusBadRequest, gin.H{
-				"error": "email y password son obligatorios",
+				"error": "todos los campos son obligatorios",
 			})
 			return
 		}
@@ -48,8 +49,14 @@ func RegisterHandler(store *storage.Store) gin.HandlerFunc {
 		}
 
 		if err := store.CreateUser(&user); err != nil {
-			c.JSON(http.StatusConflict, gin.H{
-				"error": err.Error(),
+			if errors.Is(err, storage.ErrEmailTaken) {
+				c.JSON(http.StatusConflict, gin.H{
+					"error": err.Error(),
+				})
+				return
+			}
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "no se pudo crear el usuario",
 			})
 			return
 		}
@@ -68,6 +75,7 @@ func RegisterHandler(store *storage.Store) gin.HandlerFunc {
 		})
 	}
 }
+
 
 func LoginHandler(store *storage.Store, tokenStore *security.TokenStore) gin.HandlerFunc {
 	return func(c *gin.Context) {
