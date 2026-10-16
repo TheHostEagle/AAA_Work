@@ -3,8 +3,12 @@ flowchart TB
     subgraph Aplicacion["AutoMarket · proceso Go"]
         Router["Gin router<br/>cmd/server/main.go"]
         AuditMW["AccountingMiddleware<br/>registra cada solicitud"]
+        WebUI["Interfaz HTML<br/>web/templates/index.html"]
         AuthMW["AuthenticationMiddleware<br/>valida Bearer token"]
         RoleMW["AuthorizationMiddleware<br/>comprueba rol en Store"]
+        AuthService["AuthService<br/>registro y login"]
+        VehicleService["VehicleService<br/>catálogo, publicación y venta"]
+        AdminService["AdminService<br/>aprobación y eliminación"]
         AuthHandlers["Auth handlers<br/>registro y login"]
         VehicleHandlers["Vehicle handlers<br/>catálogo, crear y reportar venta"]
         AdminHandlers["Admin handlers<br/>aprobar y eliminar"]
@@ -12,6 +16,7 @@ flowchart TB
         Password["Password helpers<br/>salt aleatorio + SHA-256 iterado"]
         Models["Modelos<br/>User · Vehicle · AuditLog"]
         Store["Store<br/>mutex + JSON en disco"]
+        Startup["Inicio del servidor<br/>seed admin + verificar auditoría"]
     end
     subgraph Archivos["Persistencia local · directorio data/"]
         Users[("users.json")]
@@ -21,6 +26,8 @@ flowchart TB
 
     Cliente --> Router
     Router --> AuditMW
+    AuditMW --> WebUI
+    WebUI --> Cliente
     AuditMW --> AuthHandlers
     AuditMW --> VehicleHandlers
     AuditMW --> AuthMW
@@ -30,11 +37,16 @@ flowchart TB
     AuthMW --> RoleMW
     RoleMW --> VehicleHandlers
     RoleMW --> AdminHandlers
-    AuthHandlers --> Store
-    VehicleHandlers --> Store
-    AdminHandlers --> Store
+    AuthHandlers --> AuthService
+    VehicleHandlers --> VehicleService
+    AdminHandlers --> AdminService
+    AuthService --> Store
+    VehicleService --> Store
+    AdminService --> Store
     RoleMW --> Store
     AuditMW --> Store
+    Startup --> Store
+    Router --> Startup
     Store --> Models
     Store <--> Users
     Store <--> Vehicles

@@ -20,6 +20,8 @@ const rounds = 100_000
 // guardado.
 const saltBytes = 16
 
+const dummyHash = "100000$00000000000000000000000000000000$0000000000000000000000000000000000000000000000000000000000000000"
+
 var ErrInvalidHash = errors.New("formato de hash inválido")
 
 // HashPassword recibe la contraseña en texto plano y devuelve algo seguro
@@ -58,6 +60,12 @@ func VerifyPassword(password, encoded string) (bool, error) {
 
 	// Comparamos los hashes usando ConstantTimeCompare.
 	return subtle.ConstantTimeCompare(gotHash, wantHash) == 1, nil
+}
+
+// BurnVerify performs the normal password-hash work when an account is absent,
+// reducing the timing difference between unknown users and wrong passwords.
+func BurnVerify(password string) {
+	_, _ = VerifyPassword(password, dummyHash)
 }
 
 // derive es el que realmente hace el trabajo pesado: le aplica SHA-256 a la

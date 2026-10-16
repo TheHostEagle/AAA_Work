@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"automarket/internal/httpx"
 	"automarket/internal/models"
 	"automarket/internal/security"
 	"automarket/internal/storage"
@@ -22,10 +23,7 @@ func AuthenticationMiddleware(tokenStore *security.TokenStore) gin.HandlerFunc {
 
 		// 2. Si no existe, rechazamos la petición.
 		if authHeader == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": "token requerido",
-			})
-			c.Abort()
+			httpx.Abort(c, http.StatusUnauthorized, "token requerido")
 			return
 		}
 
@@ -34,10 +32,7 @@ func AuthenticationMiddleware(tokenStore *security.TokenStore) gin.HandlerFunc {
 		parts := strings.SplitN(authHeader, " ", 2)
 
 		if len(parts) != 2 || parts[0] != "Bearer" {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": "formato de token inválido",
-			})
-			c.Abort()
+			httpx.Abort(c, http.StatusUnauthorized, "formato de token inválido")
 			return
 		}
 
@@ -47,10 +42,7 @@ func AuthenticationMiddleware(tokenStore *security.TokenStore) gin.HandlerFunc {
 		userID, ok := tokenStore.GetUserID(token)
 
 		if !ok {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": "token inválido",
-			})
-			c.Abort()
+			httpx.Abort(c, http.StatusUnauthorized, "token inválido")
 			return
 		}
 
@@ -74,10 +66,7 @@ func AuthorizationMiddleware(
 		userIDValue, exists := c.Get("userID")
 
 		if !exists {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": "usuario no autenticado",
-			})
-			c.Abort()
+			httpx.Abort(c, http.StatusUnauthorized, "usuario no autenticado")
 			return
 		}
 
@@ -85,10 +74,7 @@ func AuthorizationMiddleware(
 		userID, ok := userIDValue.(string)
 
 		if !ok {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": "identidad inválida",
-			})
-			c.Abort()
+			httpx.Abort(c, http.StatusUnauthorized, "identidad inválida")
 			return
 		}
 
@@ -96,19 +82,13 @@ func AuthorizationMiddleware(
 		user, err := store.GetUserByID(userID)
 
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": "usuario no encontrado",
-			})
-			c.Abort()
+			httpx.Abort(c, http.StatusUnauthorized, "usuario no encontrado")
 			return
 		}
 
 		// 4. Comprobar si el usuario tiene el rol requerido.
 		if user.Role != requiredRole {
-			c.JSON(http.StatusForbidden, gin.H{
-				"error": "no tienes permisos para realizar esta operación",
-			})
-			c.Abort()
+			httpx.Abort(c, http.StatusForbidden, "no tienes permisos para realizar esta operación")
 			return
 		}
 
@@ -125,7 +105,7 @@ func AccountingMiddleware(store *storage.Store) gin.HandlerFunc {
 
 		entry := models.AuditLog{
 			ActorID:        "anonimo",
-			ActorRole:      "visitante",
+			ActorRole:      models.RoleVisitor,
 			Method:         c.Request.Method,
 			Endpoint:       c.Request.URL.Path,
 			StatusResponse: c.Writer.Status(),
@@ -134,7 +114,7 @@ func AccountingMiddleware(store *storage.Store) gin.HandlerFunc {
 		if userIDValue, exists := c.Get("userID"); exists {
 			if userID, ok := userIDValue.(string); ok {
 				entry.ActorID = userID
-				entry.ActorRole = "desconocido"
+				entry.ActorRole = models.RoleVisitor
 				if roleValue, hasRole := c.Get("userRole"); hasRole {
 					if role, ok := roleValue.(string); ok {
 						entry.ActorRole = role

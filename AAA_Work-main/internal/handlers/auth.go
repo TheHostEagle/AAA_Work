@@ -1,135 +1,71 @@
 package handlers
 
 import (
-	"errors"
 	"net/http"
 
-	"automarket/internal/models"
-	"automarket/internal/security"
-	"automarket/internal/storage"
+	"automarket/internal/httpx"
+	"automarket/internal/service"
 
 	"github.com/gin-gonic/gin"
 )
 
-func RegisterHandler(store *storage.Store) gin.HandlerFunc {
+// RegisterHandler validates registration input and delegates account creation.
+func RegisterHandler(auth *service.AuthService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var input struct {
 			Name     string `json:"name"`
 			Email    string `json:"email"`
 			Password string `json:"password"`
 		}
-
 		if err := c.ShouldBindJSON(&input); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": "JSON inválido",
-			})
+			httpx.Error(c, http.StatusBadRequest, "JSON inválido")
 			return
 		}
-
 		if input.Name == "" || input.Email == "" || input.Password == "" {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": "todos los campos son obligatorios",
-			})
+			httpx.Error(c, http.StatusBadRequest, "todos los campos son obligatorios")
 			return
 		}
 
-		passwordHash, err := security.HashPassword(input.Password)
+		user, err := auth.Register(input.Name, input.Email, input.Password)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "no se pudo procesar la contraseña",
-			})
+			respondServiceError(c, err, errorMessages{Internal: "no se pudo crear el usuario"})
 			return
 		}
-
-		user := models.User{
-			Name:         input.Name,
-			Email:        input.Email,
-			PasswordHash: passwordHash,
-			Role:         "vendedor",
-		}
-
-		if err := store.CreateUser(&user); err != nil {
-			if errors.Is(err, storage.ErrEmailTaken) {
-				c.JSON(http.StatusConflict, gin.H{
-					"error": err.Error(),
-				})
-				return
-			}
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "no se pudo crear el usuario",
-			})
-			return
-		}
-
 		c.Set("userID", user.ID)
 		c.Set("userRole", user.Role)
-
 		c.JSON(http.StatusCreated, gin.H{
 			"message": "usuario creado",
 			"user": gin.H{
-				"id":    user.ID,
-				"name":  user.Name,
-				"email": user.Email,
-				"role":  user.Role,
+				"id": user.ID, "name": user.Name, "email": user.Email, "role": user.Role,
 			},
 		})
 	}
 }
 
-
-func LoginHandler(store *storage.Store, tokenStore *security.TokenStore) gin.HandlerFunc {
+// LoginHandler authenticates credentials and returns an opaque bearer token.
+func LoginHandler(auth *service.AuthService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var input struct {
 			Email    string `json:"email"`
 			Password string `json:"password"`
 		}
-
 		if err := c.ShouldBindJSON(&input); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": "JSON inválido",
-			})
+			httpx.Error(c, http.StatusBadRequest, "JSON inválido")
 			return
 		}
 
-		user, err := store.GetUserByEmail(input.Email)
+		user, token, err := auth.Login(input.Email, input.Password)
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": "credenciales inválidas",
-			})
+			respondServiceError(c, err, errorMessages{Internal: "no se pudo generar el token"})
 			return
 		}
-
-		valid, err := security.VerifyPassword(
-			input.Password,
-			user.PasswordHash,
-		)
-
-		if err != nil || !valid {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": "credenciales inválidas",
-			})
-			return
-		}
-
-		token, err := tokenStore.Create(user.ID)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "no se pudo generar el token",
-			})
-			return
-		}
-
 		c.Set("userID", user.ID)
 		c.Set("userRole", user.Role)
-
 		c.JSON(http.StatusOK, gin.H{
 			"message": "login correcto",
 			"token":   token,
 			"user": gin.H{
-				"id":    user.ID,
-				"name":  user.Name,
-				"email": user.Email,
-				"role":  user.Role,
+				"id": user.ID, "name": user.Name, "email": user.Email, "role": user.Role,
 			},
 		})
 	}

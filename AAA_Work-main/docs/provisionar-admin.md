@@ -6,7 +6,7 @@ El API asigna el rol `vendedor` a todo registro público y no ofrece una ruta pa
 2. En otra ventana de PowerShell, crea una cuenta temporal con el registro existente. Usa un correo y contraseña de demostración, no credenciales personales:
 
    ```powershell
-   $body = @{ name = 'Admin Demo'; email = 'admin-demo@example.test'; password = 'CAMBIAR-POR-CLAVE-DEMO' } | ConvertTo-Json
+   $body = @{ name = 'Admin Demo'; email = 'alejandro.escudero@correounivalle.edu.co'; password = '7456' } | ConvertTo-Json
    Invoke-RestMethod -Method Post -Uri 'http://localhost:8080/api/auth/register' -ContentType 'application/json' -Body $body
    ```
 

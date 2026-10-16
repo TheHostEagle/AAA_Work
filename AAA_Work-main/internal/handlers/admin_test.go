@@ -8,6 +8,7 @@ import (
 	"automarket/internal/middleware"
 	"automarket/internal/models"
 	"automarket/internal/security"
+	"automarket/internal/service"
 	"automarket/internal/storage"
 
 	"github.com/gin-gonic/gin"
@@ -25,13 +26,14 @@ func newAdminTestStore(t *testing.T) *storage.Store {
 func TestApproveVehicleHandler(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	store := newAdminTestStore(t)
-	vehicle := models.Vehicle{SellerID: "seller-1", Title: "Vehículo pendiente"}
+	admin := service.NewAdminService(store)
+	vehicle := models.Vehicle{SellerID: "seller-1", Title: "Vehículo pendiente", Status: models.StatusPending}
 	if err := store.CreateVehicle(&vehicle); err != nil {
 		t.Fatal(err)
 	}
 
 	router := gin.New()
-	router.PUT("/api/admin/vehicles/:id/approve", ApproveVehicleHandler(store))
+	router.PUT("/api/admin/vehicles/:id/approve", ApproveVehicleHandler(admin))
 	request := httptest.NewRequest(http.MethodPut, "/api/admin/vehicles/"+vehicle.ID+"/approve", nil)
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, request)
@@ -43,7 +45,7 @@ func TestApproveVehicleHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if updated.Status != "publicada" {
+	if updated.Status != models.StatusPublished {
 		t.Fatalf("estado = %q; se esperaba publicada", updated.Status)
 	}
 
@@ -63,13 +65,14 @@ func TestApproveVehicleHandler(t *testing.T) {
 func TestDeleteVehicleHandler(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	store := newAdminTestStore(t)
-	vehicle := models.Vehicle{SellerID: "seller-1", Title: "Vehículo para eliminar"}
+	admin := service.NewAdminService(store)
+	vehicle := models.Vehicle{SellerID: "seller-1", Title: "Vehículo para eliminar", Status: models.StatusPending}
 	if err := store.CreateVehicle(&vehicle); err != nil {
 		t.Fatal(err)
 	}
 
 	router := gin.New()
-	router.DELETE("/api/admin/vehicles/:id", DeleteVehicleHandler(store))
+	router.DELETE("/api/admin/vehicles/:id", DeleteVehicleHandler(admin))
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodDelete, "/api/admin/vehicles/"+vehicle.ID, nil))
 	if recorder.Code != http.StatusOK {
@@ -89,13 +92,14 @@ func TestDeleteVehicleHandler(t *testing.T) {
 func TestDeleteUserHandler(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	store := newAdminTestStore(t)
-	user := models.User{Name: "Usuario", Email: "usuario@example.com", Role: "vendedor"}
+	admin := service.NewAdminService(store)
+	user := models.User{Name: "Usuario", Email: "usuario@example.com", Role: models.RoleSeller}
 	if err := store.CreateUser(&user); err != nil {
 		t.Fatal(err)
 	}
 
 	router := gin.New()
-	router.DELETE("/api/admin/users/:id", DeleteUserHandler(store))
+	router.DELETE("/api/admin/users/:id", DeleteUserHandler(admin))
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodDelete, "/api/admin/users/"+user.ID, nil))
 	if recorder.Code != http.StatusOK {
@@ -114,7 +118,7 @@ func TestDeleteUserHandler(t *testing.T) {
 func TestAdminEndpointsRequireAuthenticationAndRole(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	store := newAdminTestStore(t)
-	seller := models.User{Name: "Vendedor", Email: "vendedor@example.com", Role: "vendedor"}
+	seller := models.User{Name: "Vendedor", Email: "vendedor@example.com", Role: models.RoleSeller}
 	if err := store.CreateUser(&seller); err != nil {
 		t.Fatal(err)
 	}
@@ -127,8 +131,8 @@ func TestAdminEndpointsRequireAuthenticationAndRole(t *testing.T) {
 	router := gin.New()
 	adminGroup := router.Group("/api/admin")
 	adminGroup.Use(middleware.AuthenticationMiddleware(tokenStore))
-	adminGroup.Use(middleware.AuthorizationMiddleware(store, "administrador"))
-	adminGroup.DELETE("/vehicles/:id", DeleteVehicleHandler(store))
+	adminGroup.Use(middleware.AuthorizationMiddleware(store, models.RoleAdmin))
+	adminGroup.DELETE("/vehicles/:id", DeleteVehicleHandler(service.NewAdminService(store)))
 
 	unauthenticated := httptest.NewRecorder()
 	router.ServeHTTP(unauthenticated, httptest.NewRequest(http.MethodDelete, "/api/admin/vehicles/id-1", nil))

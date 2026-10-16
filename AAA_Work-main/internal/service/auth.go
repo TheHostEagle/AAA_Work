@@ -1,0 +1,69 @@
+package service
+
+import (
+	"errors"
+
+	"automarket/internal/models"
+	"automarket/internal/security"
+	"automarket/internal/storage"
+)
+
+type authStore interface {
+	CreateUser(*models.User) error
+	GetUserByEmail(string) (models.User, error)
+}
+
+type tokenIssuer interface {
+	Create(userID string) (string, error)
+}
+
+type AuthService struct {
+	store  authStore
+	tokens tokenIssuer
+}
+
+func NewAuthService(store authStore, tokens tokenIssuer) *AuthService {
+	return &AuthService{store: store, tokens: tokens}
+}
+
+func (s *AuthService) Register(name, email, password string) (models.User, error) {
+	passwordHash, err := security.HashPassword(password)
+	if err != nil {
+		return models.User{}, err
+	}
+	user := models.User{
+		Name:         name,
+		Email:        email,
+		PasswordHash: passwordHash,
+		Role:         models.RoleSeller,
+	}
+	if err := s.store.CreateUser(&user); err != nil {
+		return models.User{}, err
+	}
+	return user, nil
+}
+
+func (s *AuthService) Login(email, password string) (models.User, string, error) {
+	user, err := s.store.GetUserByEmail(email)
+	if errors.Is(err, storage.ErrNotFound) {
+		security.BurnVerify(password)
+		return models.User{}, "", ErrInvalidCredentials
+	}
+	if err != nil {
+		return models.User{}, "", err
+	}
+
+	valid, err := security.VerifyPassword(password, user.PasswordHash)
+	if err != nil {
+		security.BurnVerify(password)
+		return models.User{}, "", ErrInvalidCredentials
+	}
+	if !valid {
+		return models.User{}, "", ErrInvalidCredentials
+	}
+	token, err := s.tokens.Create(user.ID)
+	if err != nil {
+		return models.User{}, "", err
+	}
+	return user, token, nil
+}

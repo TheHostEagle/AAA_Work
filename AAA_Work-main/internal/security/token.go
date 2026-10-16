@@ -8,7 +8,6 @@ import (
 
 const tokenBytes = 32
 
-
 // TokenStore guarda qué usuario pertenece a cada token.
 type TokenStore struct {
 	mu     sync.RWMutex
