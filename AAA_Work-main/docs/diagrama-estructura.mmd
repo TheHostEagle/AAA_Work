@@ -1,0 +1,48 @@
+flowchart TB
+    Cliente["Cliente HTTP"]
+    subgraph Aplicacion["AutoMarket · proceso Go"]
+        Router["Gin router<br/>cmd/server/main.go"]
+        AuditMW["AccountingMiddleware<br/>registra cada solicitud"]
+        AuthMW["AuthenticationMiddleware<br/>valida Bearer token"]
+        RoleMW["AuthorizationMiddleware<br/>comprueba rol en Store"]
+        AuthHandlers["Auth handlers<br/>registro y login"]
+        VehicleHandlers["Vehicle handlers<br/>catálogo, crear y reportar venta"]
+        AdminHandlers["Admin handlers<br/>aprobar y eliminar"]
+        TokenStore["TokenStore<br/>tokens en memoria"]
+        Password["Password helpers<br/>salt aleatorio + SHA-256 iterado"]
+        Models["Modelos<br/>User · Vehicle · AuditLog"]
+        Store["Store<br/>mutex + JSON en disco"]
+    end
+    subgraph Archivos["Persistencia local · directorio data/"]
+        Users[("users.json")]
+        Vehicles[("vehicles.json")]
+        Audit[("audit.json<br/>hash encadenado SHA-256")]
+    end
+
+    Cliente --> Router
+    Router --> AuditMW
+    AuditMW --> AuthHandlers
+    AuditMW --> VehicleHandlers
+    AuditMW --> AuthMW
+    AuthHandlers --> Password
+    AuthHandlers --> TokenStore
+    AuthMW --> TokenStore
+    AuthMW --> RoleMW
+    RoleMW --> VehicleHandlers
+    RoleMW --> AdminHandlers
+    AuthHandlers --> Store
+    VehicleHandlers --> Store
+    AdminHandlers --> Store
+    RoleMW --> Store
+    AuditMW --> Store
+    Store --> Models
+    Store <--> Users
+    Store <--> Vehicles
+    Store <--> Audit
+
+    classDef boundary fill:#eef5ff,stroke:#316ac5,color:#142b4d;
+    classDef security fill:#fff4dc,stroke:#bb7a00,color:#513800;
+    classDef persistence fill:#eaf7ee,stroke:#32814b,color:#173b22;
+    class Router,Cliente boundary;
+    class AuditMW,AuthMW,RoleMW,TokenStore,Password security;
+    class Users,Vehicles,Audit,Store persistence;
