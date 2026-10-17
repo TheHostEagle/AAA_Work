@@ -203,21 +203,7 @@ Remove-Item -Recurse -Force data
 - Los tokens viven en memoria: no expiran y se pierden al reiniciar el servidor.
 - Las contraseñas se guardan con sal y SHA-256 iterado (100.000 rondas), porque bcrypt y librerías similares están prohibidas en el taller.
 
-## 8. Problemas frecuentes
-
-| Síntoma | Causa probable | Solución |
-|---|---|---|
-| `go : El término 'go' no se reconoce` | Go no está instalado o la terminal se abrió antes de instalarlo | Instala Go y abre una terminal nueva |
-| `go mod tidy` falla con `no such host` | Sin internet, proxy o firewall | Revisa la conexión o configura `GOPROXY` |
-| `listen tcp :8080: bind` | El puerto 8080 está ocupado | `netstat -ano \| findstr :8080`, luego `taskkill /PID <pid> /F` |
-| Error sobre `web/templates/index.html` | Ejecutaste `go run` desde otra carpeta | Entra a la raíz del repo y ejecuta `go run ./cmd/server` |
-| `ADMIN_EMAIL/ADMIN_PASSWORD no definidos` | Variables no definidas en esa ventana | Defínelas (sección 3) y reinicia el servidor |
-| Login del admin da `401` | Contraseña distinta a la usada al crearlo | Usa la original, o borra `data\` y arranca de nuevo |
-| `401 token inválido` de repente | Reiniciaste el servidor: los tokens viven en memoria | Haz login de nuevo |
-| El servidor no arranca: `cadena de auditoría alterada` | `audit.json` fue editado o quedó corrupto | Restaura el original o borra `data\audit.json` |
-| `Access is denied` al escribir en `data\` | Repo en una carpeta sincronizada (OneDrive) | Pausa la sincronización o mueve el repo |
-
-## 9. Estructura del código
+## 8. Estructura del código
 
 ```
 cmd/server/          arranque, rutas y semilla del administrador
@@ -232,8 +218,6 @@ web/templates/       interfaz HTML (demo visual)
 docs/                diagramas de estructura y de comportamiento (Mermaid)
 ```
 
-## 10. Declaración de uso responsable de IA
+## 9. Declaración de uso responsable de IA
 
-El equipo utilizó asistentes de IA (Claude) como apoyo en la revisión del código frente a los requisitos del taller, la limpieza de código, la redacción de pruebas y de la guía de ejecución, y la preparación de la sustentación. Todo el código fue revisado, ejecutado y comprendido por los integrantes, quienes pueden explicarlo y defenderlo. Las decisiones de diseño y los límites de la solución son responsabilidad del equipo. No se incluyeron dependencias distintas de Gin.
-
-Además, la IA se utilizó, en última instancia, para crear el diseño de la interfaz web (`web/templates/index.html`).
+El equipo utilizó asistentes de IA como apoyo en la revisión del cumplimiento del código frente a todos los requisitos del taller, la limpieza de código, la redacción de pruebas y de la guía de ejecución. Todo el código fue revisado, ejecutado y comprendido por los integrantes, quienes pueden explicarlo y defenderlo. Las decisiones de diseño y los límites de la solución son responsabilidad del equipo. No se incluyeron dependencias distintas de Gin. Además, la IA se utilizó, en última instancia, para crear el diseño de la interfaz web (`web/templates/index.html`).
