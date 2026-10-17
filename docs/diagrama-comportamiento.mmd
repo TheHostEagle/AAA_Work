@@ -1,0 +1,52 @@
+flowchart TD
+    Inicio([Solicitud HTTP]) --> Accounting["AccountingMiddleware global"]
+    Accounting --> Tipo{Ruta / operación}
+
+    Tipo -->|GET /| Pagina[Servir interfaz HTML]
+    Pagina --> Respuesta
+
+    Tipo -->|POST /auth/register| Registro[Validar datos y crear vendedor]
+    Registro --> Hash["Generar salt y hash de contraseña"]
+    Hash --> GuardarUsuario[Guardar usuario en users.json]
+    GuardarUsuario --> Respuesta
+
+    Tipo -->|POST /auth/login| Login[Buscar usuario y verificar contraseña]
+    Login --> LoginOK{¿Credenciales válidas?}
+    LoginOK -->|No| Error401[401 credenciales inválidas]
+    LoginOK -->|Sí| CrearToken[Crear token aleatorio en memoria]
+    CrearToken --> Respuesta
+
+    Tipo -->|GET /vehicles| Catalogo[Leer vehículos publicados]
+    Catalogo --> Contacto[Obtener nombre y email del vendedor]
+    Contacto --> Respuesta
+
+    Tipo -->|Operaciones vendedor| ValidarVendedor[Autenticar Bearer y autorizar rol vendedor]
+    ValidarVendedor --> VendedorOK{¿Token válido y rol vendedor?}
+    VendedorOK -->|No token válido| Error401
+    VendedorOK -->|Rol incorrecto| Error403[403 sin permiso]
+    VendedorOK -->|Sí| AccionVendedor{Operación}
+    AccionVendedor -->|POST /vehicles| CrearPendiente[Guardar vehículo pendiente asociado al vendedor]
+    AccionVendedor -->|PUT /vehicles/:id/sold| ValidarPropietario{¿Es dueño y está publicada?}
+    ValidarPropietario -->|No dueño| Error403
+    ValidarPropietario -->|No publicada| Error409[409 estado no permitido]
+    ValidarPropietario -->|Sí| MarcarVendido[Actualizar estado a vendido]
+    CrearPendiente --> Respuesta
+    MarcarVendido --> Respuesta
+
+    Tipo -->|Operaciones administrador| ValidarAdmin[Autenticar Bearer y autorizar rol administrador]
+    ValidarAdmin --> AdminOK{¿Token válido y rol administrador?}
+    AdminOK -->|No token válido| Error401
+    AdminOK -->|Rol incorrecto| Error403
+    AdminOK -->|Sí| AccionAdmin{Operación}
+    AccionAdmin -->|PUT approve| Aprobar[Si está pendiente, cambiar a publicada]
+    AccionAdmin -->|DELETE vehicle| EliminarVehiculo[Eliminar publicación]
+    AccionAdmin -->|DELETE user| EliminarUsuario[Eliminar cuenta y sus vehículos]
+    Aprobar --> Respuesta
+    EliminarVehiculo --> Respuesta
+    EliminarUsuario --> Respuesta
+
+    Error401 --> Respuesta
+    Error403 --> Respuesta
+    Error409 --> Respuesta
+    Respuesta["Enviar respuesta HTTP"] --> Registrar["AccountingMiddleware registra actor, ruta, método, estado y hash encadenado"]
+    Registrar --> Fin([Fin])

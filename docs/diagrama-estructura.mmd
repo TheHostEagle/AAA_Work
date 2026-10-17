@@ -1,25 +1,58 @@
-flowchart TD
+flowchart TB
     Cliente["Cliente HTTP"]
-    Gin["Router Gin<br/>cmd/server/main.go"]
-    Publico["GET /api/vehicles<br/>sin autenticación"]
-    Auth["Middleware de autenticación"]
-    Rol["Middleware de autorización<br/>rol administrador"]
-    Aprobar["PUT /api/admin/vehicles/:id/approve"]
-    BorrarVehiculo["DELETE /api/admin/vehicles/:id"]
-    BorrarUsuario["DELETE /api/admin/users/:id"]
-    Store["Store<br/>internal/storage"]
-    Vehiculos["vehicles.json"]
-    Usuarios["users.json"]
+    subgraph Aplicacion["AutoMarket · proceso Go"]
+        Startup["cmd/server<br/>arranque: verificar auditoría + seed admin + rutas"]
+        subgraph MW["middleware (RF-01)"]
+            Acc["AccountingMiddleware<br/>registra cada petición"]
+            Authn["AuthenticationMiddleware<br/>valida Bearer token"]
+            Authz["AuthorizationMiddleware<br/>comprueba el rol"]
+        end
+        subgraph H["handlers (HTTP)"]
+            AuthH["Auth handlers<br/>registro y login"]
+            VehH["Vehicle handlers<br/>catálogo, publicar, reportar venta"]
+            AdmH["Admin handlers<br/>aprobar y eliminar"]
+        end
+        WebUI["Interfaz HTML<br/>web/templates/index.html (GET /)"]
+        Httpx["httpx<br/>errores JSON + identidad en contexto"]
+        subgraph S["service (reglas de negocio)"]
+            AuthS["AuthService"]
+            VehS["VehicleService"]
+            AdmS["AdminService"]
+        end
+        Sec["security<br/>hash de contraseña + TokenStore"]
+        Models["models<br/>entidades, constantes y errores de dominio"]
+        Store["storage.Store<br/>mutex + JSON en disco"]
+    end
+    subgraph Archivos["Persistencia local · data/"]
+        Users[("users.json")]
+        Vehicles[("vehicles.json")]
+        Audit[("audit.json<br/>hash encadenado SHA-256")]
+    end
 
-    Cliente --> Gin
-    Gin --> Publico
-    Gin --> Auth --> Rol
-    Rol --> Aprobar
-    Rol --> BorrarVehiculo
-    Rol --> BorrarUsuario
-    Publico --> Store
-    Aprobar --> Store
-    BorrarVehiculo --> Store
-    BorrarUsuario --> Store
-    Store --> Vehiculos
-    Store --> Usuarios
+    Cliente --> Acc
+    Acc --> WebUI
+    WebUI -. "fetch /api/*" .-> Cliente
+    Acc --> AuthH
+    Acc --> VehH
+    Acc --> Authn
+    Authn --> Authz
+    Authz --> VehH
+    Authz --> AdmH
+    Authn --> Sec
+    Authz --> Store
+    Acc --> Store
+    AuthH --> AuthS
+    VehH --> VehS
+    AdmH --> AdmS
+    AuthS --> Sec
+    AuthS --> Store
+    VehS --> Store
+    AdmS --> Store
+    H --> Httpx
+    MW --> Httpx
+    Startup --> Store
+    Store --> Models
+    S --> Models
+    Store <--> Users
+    Store <--> Vehicles
+    Store <--> Audit

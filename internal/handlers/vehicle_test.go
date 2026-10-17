@@ -7,9 +7,11 @@ import (
 	"strings"
 	"testing"
 
+	"automarket/internal/httpx"
 	"automarket/internal/middleware"
 	"automarket/internal/models"
 	"automarket/internal/security"
+	"automarket/internal/service"
 	"automarket/internal/storage"
 
 	"github.com/gin-gonic/gin"
@@ -21,7 +23,7 @@ func newVehicleTestStore(t *testing.T) (*storage.Store, models.User) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	seller := models.User{Name: "Ana Vendedora", Email: "ana@example.com", PasswordHash: "secreto-hasheado", Role: "vendedor"}
+	seller := models.User{Name: "Ana Vendedora", Email: "ana@example.com", PasswordHash: "secreto-hasheado", Role: models.RoleSeller}
 	if err := store.CreateUser(&seller); err != nil {
 		t.Fatal(err)
 	}
@@ -32,22 +34,21 @@ func TestGetPublicVehiclesHandler(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	store, seller := newVehicleTestStore(t)
 
-	published := models.Vehicle{SellerID: seller.ID, Title: "Sedán publicado", Price: 12000}
+	published := models.Vehicle{SellerID: seller.ID, Title: "Sedán publicado", Price: 12000, Status: models.StatusPending}
 	if err := store.CreateVehicle(&published); err != nil {
 		t.Fatal(err)
 	}
-	published.Status = "publicada"
-	if err := store.UpdateVehicle(published); err != nil {
+	if _, err := store.ChangeVehicleStatus(published.ID, models.StatusPending, models.StatusPublished); err != nil {
 		t.Fatal(err)
 	}
 
-	pending := models.Vehicle{SellerID: seller.ID, Title: "Vehículo pendiente", Price: 9000}
+	pending := models.Vehicle{SellerID: seller.ID, Title: "Vehículo pendiente", Price: 9000, Status: models.StatusPending}
 	if err := store.CreateVehicle(&pending); err != nil {
 		t.Fatal(err)
 	}
 
 	router := gin.New()
-	router.GET("/api/vehicles", GetPublicVehiclesHandler(store))
+	router.GET("/api/vehicles", GetPublicVehiclesHandler(service.NewVehicleService(store)))
 	request := httptest.NewRequest(http.MethodGet, "/api/vehicles", nil)
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, request)
@@ -56,7 +57,7 @@ func TestGetPublicVehiclesHandler(t *testing.T) {
 		t.Fatalf("código HTTP = %d; se esperaba %d", recorder.Code, http.StatusOK)
 	}
 
-	var got []publicVehicle
+	var got []models.PublicVehicle
 	if err := json.Unmarshal(recorder.Body.Bytes(), &got); err != nil {
 		t.Fatalf("respuesta JSON inválida: %v", err)
 	}
@@ -75,7 +76,7 @@ func TestGetPublicVehiclesHandlerReturnsEmptyArray(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	store, _ := newVehicleTestStore(t)
 	router := gin.New()
-	router.GET("/api/vehicles", GetPublicVehiclesHandler(store))
+	router.GET("/api/vehicles", GetPublicVehiclesHandler(service.NewVehicleService(store)))
 
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/vehicles", nil))
@@ -87,13 +88,11 @@ func TestGetPublicVehiclesHandlerReturnsEmptyArray(t *testing.T) {
 		t.Fatalf("respuesta = %q; se esperaba []", recorder.Body.String())
 	}
 
-	
 }
-
 
 func asUser(userID string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.Set("userID", userID)
+		httpx.SetUserID(c, userID)
 		c.Next()
 	}
 }
@@ -108,19 +107,17 @@ func sendJSON(router *gin.Engine, method, path, body string) *httptest.ResponseR
 
 func createVehicle(t *testing.T, store *storage.Store, sellerID, status string) models.Vehicle {
 	t.Helper()
-	vehicle := models.Vehicle{SellerID: sellerID, Title: "Vehículo " + status}
+	vehicle := models.Vehicle{SellerID: sellerID, Title: "Vehículo " + status, Status: models.StatusPending}
 	if err := store.CreateVehicle(&vehicle); err != nil {
 		t.Fatal(err)
 	}
-	if status != "pendiente" {
-		vehicle.Status = status
-		if err := store.UpdateVehicle(vehicle); err != nil {
+	if status != models.StatusPending {
+		if _, err := store.ChangeVehicleStatus(vehicle.ID, models.StatusPending, status); err != nil {
 			t.Fatal(err)
 		}
 	}
 	return vehicle
 }
-
 
 //publicar vehiculo
 
@@ -128,31 +125,31 @@ func TestCreateVehicleHandler(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	store, seller := newVehicleTestStore(t)
 	router := gin.New()
-	router.POST("/api/vehicles", asUser(seller.ID), CreateVehicleHandler(store))
+	vehicles := service.NewVehicleService(store)
+	router.POST("/api/vehicles", asUser(seller.ID), CreateVehicleHandler(vehicles))
 	body := `{"title":"Koleos 2018","brand":"Renault","model":"Koleos","price":61900000,` +
-	`"status":"publicada","seller_id":"otro-usuario"}`
+		`"status":"publicada","seller_id":"otro-usuario"}`
 	recorder := sendJSON(router, http.MethodPost, "/api/vehicles", body)
 	if recorder.Code != http.StatusCreated {
 		t.Fatalf("código HTTP = %d; se esperaba %d", recorder.Code, http.StatusCreated)
 	}
-	pending := store.ListVehiclesByStatus("pendiente")
+	pending := store.ListVehiclesByStatus(models.StatusPending)
 	if len(pending) != 1 {
 		t.Fatalf("publicaciones pendientes = %d; se esperaba 1", len(pending))
 	}
 	if pending[0].SellerID != seller.ID {
 		t.Fatalf("seller_id = %q; se esperaba %q", pending[0].SellerID, seller.ID)
 	}
-	if len(store.ListVehiclesByStatus("publicada")) != 0 {
+	if len(store.ListVehiclesByStatus(models.StatusPublished)) != 0 {
 		t.Fatal("una publicación nueva no debe verse en el catálogo")
 	}
 }
-
 
 func TestCreateVehicleHandlerRejectsInvalidData(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	store, seller := newVehicleTestStore(t)
 	router := gin.New()
-	router.POST("/api/vehicles", asUser(seller.ID), CreateVehicleHandler(store))
+	router.POST("/api/vehicles", asUser(seller.ID), CreateVehicleHandler(service.NewVehicleService(store)))
 	invalidBodies := []string{
 		`{"title":"","brand":"Renault","model":"Koleos","price":1000}`,
 		`{"title":"Koleos","brand":"Renault","model":"Koleos","price":0}`,
@@ -162,10 +159,10 @@ func TestCreateVehicleHandlerRejectsInvalidData(t *testing.T) {
 		recorder := sendJSON(router, http.MethodPost, "/api/vehicles", body)
 		if recorder.Code != http.StatusBadRequest {
 			t.Fatalf("cuerpo %q: código = %d; se esperaba %d",
-			body, recorder.Code, http.StatusBadRequest)
+				body, recorder.Code, http.StatusBadRequest)
 		}
 	}
-	if len(store.ListVehiclesByStatus("pendiente")) != 0 {
+	if len(store.ListVehiclesByStatus(models.StatusPending)) != 0 {
 		t.Fatal("no debe guardarse ninguna publicación inválida")
 	}
 }
@@ -173,16 +170,17 @@ func TestCreateVehicleHandlerRejectsInvalidData(t *testing.T) {
 func TestMarkVehicleAsSoldHandler(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	store, seller := newVehicleTestStore(t)
-	other := models.User{Name: "Otro", Email: "otro@example.com", Role: "vendedor"}
+	other := models.User{Name: "Otro", Email: "otro@example.com", Role: models.RoleSeller}
 	if err := store.CreateUser(&other); err != nil {
 		t.Fatal(err)
 	}
-	published := createVehicle(t, store, seller.ID, "publicada")
-	pending := createVehicle(t, store, seller.ID, "pendiente")
+	published := createVehicle(t, store, seller.ID, models.StatusPublished)
+	pending := createVehicle(t, store, seller.ID, models.StatusPending)
+	vehicles := service.NewVehicleService(store)
 	ownerRouter := gin.New()
-	ownerRouter.PUT("/api/vehicles/:id/sold", asUser(seller.ID), MarkVehicleAsSoldHandler(store))
+	ownerRouter.PUT("/api/vehicles/:id/sold", asUser(seller.ID), MarkVehicleAsSoldHandler(vehicles))
 	otherRouter := gin.New()
-	otherRouter.PUT("/api/vehicles/:id/sold", asUser(other.ID), MarkVehicleAsSoldHandler(store))
+	otherRouter.PUT("/api/vehicles/:id/sold", asUser(other.ID), MarkVehicleAsSoldHandler(vehicles))
 	recorder := sendJSON(otherRouter, http.MethodPut, "/api/vehicles/"+published.ID+"/sold", "")
 	if recorder.Code != http.StatusForbidden {
 		t.Fatalf("publicación ajena: código = %d; se esperaba %d", recorder.Code, http.StatusForbidden)
@@ -203,10 +201,10 @@ func TestMarkVehicleAsSoldHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if updated.Status != "vendido" {
+	if updated.Status != models.StatusSold {
 		t.Fatalf("estado = %q; se esperaba vendido", updated.Status)
 	}
-	if len(store.ListVehiclesByStatus("publicada")) != 0 {
+	if len(store.ListVehiclesByStatus(models.StatusPublished)) != 0 {
 		t.Fatal("un vehículo vendido no debe verse en el catálogo")
 	}
 	recorder = sendJSON(ownerRouter, http.MethodPut, "/api/vehicles/"+published.ID+"/sold", "")
@@ -218,7 +216,7 @@ func TestMarkVehicleAsSoldHandler(t *testing.T) {
 func TestSellerEndpointsRequireSellerRole(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	store, seller := newVehicleTestStore(t)
-	admin := models.User{Name: "Admin", Email: "admin@example.com", Role: "administrador"}
+	admin := models.User{Name: "Admin", Email: "admin@example.com", Role: models.RoleAdmin}
 	if err := store.CreateUser(&admin); err != nil {
 		t.Fatal(err)
 	}
@@ -234,8 +232,8 @@ func TestSellerEndpointsRequireSellerRole(t *testing.T) {
 	router := gin.New()
 	sellerGroup := router.Group("/api/vehicles")
 	sellerGroup.Use(middleware.AuthenticationMiddleware(tokenStore))
-	sellerGroup.Use(middleware.AuthorizationMiddleware(store, "vendedor"))
-	sellerGroup.POST("", CreateVehicleHandler(store))
+	sellerGroup.Use(middleware.AuthorizationMiddleware(store, models.RoleSeller))
+	sellerGroup.POST("", CreateVehicleHandler(service.NewVehicleService(store)))
 	body := `{"title":"Koleos","brand":"Renault","model":"Koleos","price":1000}`
 	postWithToken := func(token string) int {
 		request := httptest.NewRequest(http.MethodPost, "/api/vehicles", strings.NewReader(body))

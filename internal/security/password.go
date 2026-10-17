@@ -15,10 +15,16 @@ import (
 // alguien adivinar la contraseña a la fuerza si se roba la base de datos.
 const rounds = 100_000
 
+// maxRounds acota las rondas leídas de un hash almacenado para que un registro
+// alterado no pueda consumir CPU sin límite durante la verificación.
+const maxRounds = 1_000_000
+
 // Tamaño del valor random que se le suma a cada contraseña. Esto evita
 // que dos personas con la misma contraseña terminen con el mismo hash
 // guardado.
 const saltBytes = 16
+
+const dummyHash = "100000$00000000000000000000000000000000$0000000000000000000000000000000000000000000000000000000000000000"
 
 var ErrInvalidHash = errors.New("formato de hash inválido")
 
@@ -60,6 +66,13 @@ func VerifyPassword(password, encoded string) (bool, error) {
 	return subtle.ConstantTimeCompare(gotHash, wantHash) == 1, nil
 }
 
+// BurnVerify hace el trabajo normal de verificación de contraseña cuando la cuenta
+// no existe, para reducir la diferencia de tiempo entre usuario inexistente y
+// contraseña incorrecta.
+func BurnVerify(password string) {
+	_, _ = VerifyPassword(password, dummyHash)
+}
+
 // derive es el que realmente hace el trabajo pesado: le aplica SHA-256 a la
 // contraseña una y otra vez, muchas veces seguidas, para que calcularlo
 // sea lento a propósito.
@@ -87,7 +100,7 @@ func decode(encoded string) (r int, salt, hash []byte, err error) {
 	}
 
 	r, err = strconv.Atoi(parts[0])
-	if err != nil {
+	if err != nil || r < 1 || r > maxRounds {
 		return 0, nil, nil, ErrInvalidHash
 	}
 
