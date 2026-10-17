@@ -1,4 +1,4 @@
-// implementa la persistencia nativa del proyecto
+// Package storage implements the project's JSON-backed persistence.
 package storage
 
 import (
@@ -16,12 +16,10 @@ import (
 	"automarket/internal/models"
 )
 
-var (
-	ErrNotFound   = errors.New("registro no encontrado")
-	ErrEmailTaken = errors.New("el correo ya está registrado")
-)
+// ErrAuditTampered indica que la cadena de hashes de auditoría fue alterada.
+var ErrAuditTampered = errors.New("cadena de auditoría alterada")
 
-// Store guarda usuarios, vehículos y logs de auditoría.
+// Store guards in-memory records and their JSON files.
 type Store struct {
 	mu       sync.Mutex
 	dir      string
@@ -30,9 +28,9 @@ type Store struct {
 	logs     []models.AuditLog
 }
 
-// New crea (si no existe) el directorio y carga los datos ya guardados.
+// New creates the data directory and loads persisted records.
 func New(dir string) (*Store, error) {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
 	s := &Store{dir: dir}
@@ -48,169 +46,235 @@ func New(dir string) (*Store, error) {
 	return s, nil
 }
 
-//USUARIOS
-
-// CreateUser asigna ID y CreatedAt, y guarda el usuario.
-// Devuelve ErrEmailTaken si el correo ya existe.
-func (s *Store) CreateUser(u *models.User) error {
+// CreateUser assigns an ID and creation time, then persists the new user.
+func (s *Store) CreateUser(user *models.User) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, x := range s.users {
-		if x.Email == u.Email {
-			return ErrEmailTaken
+	for _, existing := range s.users {
+		if existing.Email == user.Email {
+			return models.ErrEmailTaken
 		}
 	}
-	u.ID = newID()
-	u.CreatedAt = now()
-	s.users = append(s.users, *u)
-	return s.save("users.json", s.users)
+
+	created := *user
+	id, err := newID()
+	if err != nil {
+		return err
+	}
+	created.ID = id
+	created.CreatedAt = now()
+	next := append(append([]models.User(nil), s.users...), created)
+	if err := s.save("users.json", next); err != nil {
+		return err
+	}
+	s.users = next
+	*user = created
+	return nil
 }
 
-// GetUserByEmail se usa en el login.
 func (s *Store) GetUserByEmail(email string) (models.User, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, u := range s.users {
-		if u.Email == email {
-			return u, nil
+	for _, user := range s.users {
+		if user.Email == email {
+			return user, nil
 		}
 	}
-	return models.User{}, ErrNotFound
+	return models.User{}, models.ErrNotFound
 }
 
-// GetUserByID se usa para obtener el contacto del vendedor de un vehículo.
 func (s *Store) GetUserByID(id string) (models.User, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, u := range s.users {
-		if u.ID == id {
-			return u, nil
+	for _, user := range s.users {
+		if user.ID == id {
+			return user, nil
 		}
 	}
-	return models.User{}, ErrNotFound
+	return models.User{}, models.ErrNotFound
 }
 
-// DeleteUser elimina un usuario por ID (HU-ADM-01).
-func (s *Store) DeleteUser(id string) error {
+// DeleteUserWithVehicles elimina al usuario y todas sus publicaciones bajo un
+// solo lock. Las publicaciones se persisten primero: si el segundo guardado
+// falla, el usuario sigue existiendo y la operación puede repetirse sin dejar
+// publicaciones huérfanas.
+func (s *Store) DeleteUserWithVehicles(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for i, u := range s.users {
-		if u.ID == id {
-			remaining := []models.Vehicle{}
-			for _, v := range s.vehicles {
-				if v.SellerID != id {
-					remaining = append(remaining, v)
-				}
-			}
-			s.vehicles = remaining
-			if err := s.save("vehicles.json", s.vehicles); err != nil {
-				return err
-			}
-			s.users = append(s.users[:i], s.users[i+1:]...)
-			return s.save("users.json", s.users)
+
+	userIndex := -1
+	for i, user := range s.users {
+		if user.ID == id {
+			userIndex = i
+			break
 		}
 	}
-	return ErrNotFound
+	if userIndex < 0 {
+		return models.ErrNotFound
+	}
+
+	remainingVehicles := make([]models.Vehicle, 0, len(s.vehicles))
+	for _, vehicle := range s.vehicles {
+		if vehicle.SellerID != id {
+			remainingVehicles = append(remainingVehicles, vehicle)
+		}
+	}
+	if len(remainingVehicles) != len(s.vehicles) {
+		if err := s.save("vehicles.json", remainingVehicles); err != nil {
+			return err
+		}
+		s.vehicles = remainingVehicles
+	}
+
+	remainingUsers := append(append([]models.User(nil), s.users[:userIndex]...), s.users[userIndex+1:]...)
+	if err := s.save("users.json", remainingUsers); err != nil {
+		return err
+	}
+	s.users = remainingUsers
+	return nil
 }
 
-// VEHICULOS
-
-// CreateVehicle asigna ID y CreatedAt, y lo deja en estado "pendiente".
-func (s *Store) CreateVehicle(v *models.Vehicle) error {
+// CreateVehicle assigns an ID and creation time. The service supplies its
+// initial state and owner before calling this persistence method.
+func (s *Store) CreateVehicle(vehicle *models.Vehicle) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	v.ID = newID()
-	v.CreatedAt = now()
-	v.Status = "pendiente"
-	s.vehicles = append(s.vehicles, *v)
-	return s.save("vehicles.json", s.vehicles)
+	created := *vehicle
+	id, err := newID()
+	if err != nil {
+		return err
+	}
+	created.ID = id
+	created.CreatedAt = now()
+	next := append(append([]models.Vehicle(nil), s.vehicles...), created)
+	if err := s.save("vehicles.json", next); err != nil {
+		return err
+	}
+	s.vehicles = next
+	*vehicle = created
+	return nil
 }
 
-// GetVehicle busca un vehículo por ID.
 func (s *Store) GetVehicle(id string) (models.Vehicle, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, v := range s.vehicles {
-		if v.ID == id {
-			return v, nil
+	for _, vehicle := range s.vehicles {
+		if vehicle.ID == id {
+			return vehicle, nil
 		}
 	}
-	return models.Vehicle{}, ErrNotFound
+	return models.Vehicle{}, models.ErrNotFound
 }
 
-// ListVehiclesByStatus devuelve los vehículos con ese estado
-// (el catálogo público usa "publicada").
 func (s *Store) ListVehiclesByStatus(status string) []models.Vehicle {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	out := []models.Vehicle{}
-	for _, v := range s.vehicles {
-		if v.Status == status {
-			out = append(out, v)
+	vehicles := make([]models.Vehicle, 0)
+	for _, vehicle := range s.vehicles {
+		if vehicle.Status == status {
+			vehicles = append(vehicles, vehicle)
 		}
 	}
-	return out
+	return vehicles
 }
 
-// UpdateVehicle reemplaza el vehículo que tenga el mismo ID
-// (aprobar publicación, reportar venta).
-func (s *Store) UpdateVehicle(v models.Vehicle) error {
+// ChangeVehicleStatus checks the current state and persists the transition
+// while holding one lock, so concurrent transitions cannot overwrite each other.
+func (s *Store) ChangeVehicleStatus(id, from, to string) (models.Vehicle, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for i := range s.vehicles {
-		if s.vehicles[i].ID == v.ID {
-			s.vehicles[i] = v
-			return s.save("vehicles.json", s.vehicles)
+	for i, vehicle := range s.vehicles {
+		if vehicle.ID != id {
+			continue
 		}
+		if vehicle.Status != from {
+			return models.Vehicle{}, models.ErrStatusMismatch
+		}
+		next := append([]models.Vehicle(nil), s.vehicles...)
+		next[i].Status = to
+		if err := s.save("vehicles.json", next); err != nil {
+			return models.Vehicle{}, err
+		}
+		s.vehicles = next
+		return next[i], nil
 	}
-	return ErrNotFound
+	return models.Vehicle{}, models.ErrNotFound
 }
 
-// DeleteVehicle elimina una publicación por ID (HU-ADM-01).
 func (s *Store) DeleteVehicle(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for i, v := range s.vehicles {
-		if v.ID == id {
-			s.vehicles = append(s.vehicles[:i], s.vehicles[i+1:]...)
-			return s.save("vehicles.json", s.vehicles)
+	for i, vehicle := range s.vehicles {
+		if vehicle.ID != id {
+			continue
 		}
+		next := append([]models.Vehicle(nil), s.vehicles[:i]...)
+		next = append(next, s.vehicles[i+1:]...)
+		if err := s.save("vehicles.json", next); err != nil {
+			return err
+		}
+		s.vehicles = next
+		return nil
 	}
-	return ErrNotFound
+	return models.ErrNotFound
 }
 
-// ACCOUTING
-
-// SaveAuditLog completa ID, Timestamp, PrevHash y Hash, y agrega la entrada.
-// Cada entrada queda encadenada a la anterior: si alguien modifica un log
-// viejo, su hash deja de coincidir con el PrevHash de la siguiente.
-func (s *Store) SaveAuditLog(l *models.AuditLog) error {
+// SaveAuditLog completes the chain fields and appends the entry only after the
+// new complete file has been persisted successfully.
+func (s *Store) SaveAuditLog(entry *models.AuditLog) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	l.ID = newID()
-	l.Timestamp = now()
-	l.PrevHash = "genesis"
-	if n := len(s.logs); n > 0 {
-		l.PrevHash = s.logs[n-1].Hash
+	created := *entry
+	id, err := newID()
+	if err != nil {
+		return err
 	}
-	l.Hash = hashLog(*l)
-	s.logs = append(s.logs, *l)
-	return s.save("audit.json", s.logs)
+	created.ID = id
+	created.Timestamp = now()
+	created.PrevHash = "genesis"
+	if len(s.logs) > 0 {
+		created.PrevHash = s.logs[len(s.logs)-1].Hash
+	}
+	created.Hash = hashLog(created)
+	next := append(append([]models.AuditLog(nil), s.logs...), created)
+	if err := s.save("audit.json", next); err != nil {
+		return err
+	}
+	s.logs = next
+	*entry = created
+	return nil
 }
 
-func hashLog(l models.AuditLog) string {
+// VerifyAuditChain detects broken links or entries whose stored contents no
+// longer match their hash. It does not prevent an attacker from rebuilding the
+// entire chain because the hashes are not keyed.
+func (s *Store) VerifyAuditChain() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	previous := "genesis"
+	for i, entry := range s.logs {
+		if entry.PrevHash != previous || entry.Hash != hashLog(entry) {
+			return fmt.Errorf("%w: entrada %d (id %s)", ErrAuditTampered, i, entry.ID)
+		}
+		previous = entry.Hash
+	}
+	return nil
+}
+
+func hashLog(entry models.AuditLog) string {
 	data := fmt.Sprintf("%s|%s|%s|%s|%s|%s|%d|%s",
-		l.ID, l.Timestamp, l.ActorID, l.ActorRole, l.Method, l.Endpoint, l.StatusResponse, l.PrevHash)
+		entry.ID, entry.Timestamp, entry.ActorID, entry.ActorRole, entry.Method,
+		entry.Endpoint, entry.StatusResponse, entry.PrevHash)
 	sum := sha256.Sum256([]byte(data))
 	return hex.EncodeToString(sum[:])
 }
 
-//AUXILIARES
-
-func newID() string {
-	b := make([]byte, 8)
-	_, _ = rand.Read(b)
-	return hex.EncodeToString(b)
+func newID() (string, error) {
+	bytes := make([]byte, 8)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", fmt.Errorf("generando identificador: %w", err)
+	}
+	return hex.EncodeToString(bytes), nil
 }
 
 func now() string { return time.Now().UTC().Format(time.RFC3339) }
@@ -218,7 +282,7 @@ func now() string { return time.Now().UTC().Format(time.RFC3339) }
 func (s *Store) load(name string, dst any) error {
 	data, err := os.ReadFile(filepath.Join(s.dir, name))
 	if errors.Is(err, os.ErrNotExist) {
-		return nil // primera ejecución: arranca vacío
+		return nil
 	}
 	if err != nil {
 		return err
@@ -226,17 +290,21 @@ func (s *Store) load(name string, dst any) error {
 	return json.Unmarshal(data, dst)
 }
 
-// save escribe en un archivo temporal y lo renombra, para no dejar
-// un JSON a medias si el programa se cae escribiendo.
+// save uses a restrictive temporary file and atomically renames it over the
+// target so a failed write does not publish a partial JSON document.
 func (s *Store) save(name string, src any) error {
 	data, err := json.MarshalIndent(src, "", "  ")
 	if err != nil {
 		return err
 	}
 	path := filepath.Join(s.dir, name)
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	temporary := path + ".tmp"
+	if err := os.WriteFile(temporary, data, 0o600); err != nil {
 		return err
 	}
-	return os.Rename(tmp, path)
+	if err := os.Rename(temporary, path); err != nil {
+		_ = os.Remove(temporary)
+		return err
+	}
+	return nil
 }

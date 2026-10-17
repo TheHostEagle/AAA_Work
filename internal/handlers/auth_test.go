@@ -6,6 +6,9 @@ import (
 	"strings"
 	"testing"
 
+	"automarket/internal/models"
+	"automarket/internal/security"
+	"automarket/internal/service"
 	"automarket/internal/storage"
 
 	"github.com/gin-gonic/gin"
@@ -17,13 +20,14 @@ func TestRegisterHandlerAlwaysCreatesSeller(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	auth := service.NewAuthService(store, security.NewTokenStore())
 
 	body := `{"name":"Ana","email":"ana@example.com","password":"clave-segura","role":"administrador"}`
 	request := httptest.NewRequest(http.MethodPost, "/api/auth/register", strings.NewReader(body))
 	request.Header.Set("Content-Type", "application/json")
 	recorder := httptest.NewRecorder()
 	router := gin.New()
-	router.POST("/api/auth/register", RegisterHandler(store))
+	router.POST("/api/auth/register", RegisterHandler(auth))
 	router.ServeHTTP(recorder, request)
 
 	if recorder.Code != http.StatusCreated {
@@ -33,7 +37,7 @@ func TestRegisterHandlerAlwaysCreatesSeller(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if created.Role != "vendedor" {
+	if created.Role != models.RoleSeller {
 		t.Fatalf("rol asignado = %q; se esperaba vendedor", created.Role)
 	}
 }

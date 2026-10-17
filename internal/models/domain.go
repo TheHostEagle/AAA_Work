@@ -1,5 +1,15 @@
 package models
 
+const (
+	RoleSeller  = "vendedor"
+	RoleAdmin   = "administrador"
+	RoleVisitor = "visitante"
+
+	StatusPending   = "pendiente"
+	StatusPublished = "publicada"
+	StatusSold      = "vendido"
+)
+
 type User struct {
 	ID           string `json:"id"`
 	Name         string `json:"name"`
@@ -19,6 +29,17 @@ type Vehicle struct {
 	Description string  `json:"description"`
 	Status      string  `json:"status"` // "pendiente", "publicada", "vendido"
 	CreatedAt   string  `json:"created_at"`
+}
+
+// PublicVehicle is the catalog representation; it excludes private user data.
+type PublicVehicle struct {
+	Vehicle
+	Seller SellerContact `json:"seller"`
+}
+
+type SellerContact struct {
+	Name  string `json:"name"`
+	Email string `json:"email"`
 }
 
 type AuditLog struct {
