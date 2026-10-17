@@ -66,8 +66,9 @@ func VerifyPassword(password, encoded string) (bool, error) {
 	return subtle.ConstantTimeCompare(gotHash, wantHash) == 1, nil
 }
 
-// BurnVerify performs the normal password-hash work when an account is absent,
-// reducing the timing difference between unknown users and wrong passwords.
+// BurnVerify hace el trabajo normal de verificación de contraseña cuando la cuenta
+// no existe, para reducir la diferencia de tiempo entre usuario inexistente y
+// contraseña incorrecta.
 func BurnVerify(password string) {
 	_, _ = VerifyPassword(password, dummyHash)
 }

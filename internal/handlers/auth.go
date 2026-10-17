@@ -10,7 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// RegisterHandler validates registration input and delegates account creation.
+// RegisterHandler valida los datos de registro y delega la creación de la cuenta.
 func RegisterHandler(auth *service.AuthService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var input struct {
@@ -44,7 +44,7 @@ func RegisterHandler(auth *service.AuthService) gin.HandlerFunc {
 	}
 }
 
-// LoginHandler authenticates credentials and returns an opaque bearer token.
+// LoginHandler autentica las credenciales y devuelve un token Bearer opaco.
 func LoginHandler(auth *service.AuthService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var input struct {

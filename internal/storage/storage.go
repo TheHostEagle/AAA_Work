@@ -1,4 +1,4 @@
-// Package storage implements the project's JSON-backed persistence.
+// Package storage implementa la persistencia del proyecto en archivos JSON.
 package storage
 
 import (
@@ -19,7 +19,7 @@ import (
 // ErrAuditTampered indica que la cadena de hashes de auditoría fue alterada.
 var ErrAuditTampered = errors.New("cadena de auditoría alterada")
 
-// Store guards in-memory records and their JSON files.
+// Store protege con un mutex los registros en memoria y sus archivos JSON.
 type Store struct {
 	mu       sync.Mutex
 	dir      string
@@ -28,7 +28,7 @@ type Store struct {
 	logs     []models.AuditLog
 }
 
-// New creates the data directory and loads persisted records.
+// New crea la carpeta de datos y carga los registros guardados.
 func New(dir string) (*Store, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
@@ -46,7 +46,7 @@ func New(dir string) (*Store, error) {
 	return s, nil
 }
 
-// CreateUser assigns an ID and creation time, then persists the new user.
+// CreateUser asigna ID y fecha de creación, y luego persiste al nuevo usuario.
 func (s *Store) CreateUser(user *models.User) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -134,8 +134,8 @@ func (s *Store) DeleteUserWithVehicles(id string) error {
 	return nil
 }
 
-// CreateVehicle assigns an ID and creation time. The service supplies its
-// initial state and owner before calling this persistence method.
+// CreateVehicle asigna ID y fecha de creación. El servicio define el estado
+// inicial y el dueño antes de llamar a este método de persistencia.
 func (s *Store) CreateVehicle(vehicle *models.Vehicle) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -178,8 +178,8 @@ func (s *Store) ListVehiclesByStatus(status string) []models.Vehicle {
 	return vehicles
 }
 
-// ChangeVehicleStatus checks the current state and persists the transition
-// while holding one lock, so concurrent transitions cannot overwrite each other.
+// ChangeVehicleStatus verifica el estado actual y persiste la transición bajo
+// un solo lock, para que transiciones concurrentes no se pisen entre sí.
 func (s *Store) ChangeVehicleStatus(id, from, to string) (models.Vehicle, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -219,8 +219,8 @@ func (s *Store) DeleteVehicle(id string) error {
 	return models.ErrNotFound
 }
 
-// SaveAuditLog completes the chain fields and appends the entry only after the
-// new complete file has been persisted successfully.
+// SaveAuditLog completa los campos de la cadena y agrega la entrada solo después
+// de que el archivo completo se haya guardado correctamente.
 func (s *Store) SaveAuditLog(entry *models.AuditLog) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -245,9 +245,9 @@ func (s *Store) SaveAuditLog(entry *models.AuditLog) error {
 	return nil
 }
 
-// VerifyAuditChain detects broken links or entries whose stored contents no
-// longer match their hash. It does not prevent an attacker from rebuilding the
-// entire chain because the hashes are not keyed.
+// VerifyAuditChain detecta enlaces rotos o entradas cuyo contenido guardado ya
+// no coincide con su hash. No impide que un atacante reconstruya toda la
+// cadena, porque los hashes no llevan clave.
 func (s *Store) VerifyAuditChain() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -290,8 +290,8 @@ func (s *Store) load(name string, dst any) error {
 	return json.Unmarshal(data, dst)
 }
 
-// save uses a restrictive temporary file and atomically renames it over the
-// target so a failed write does not publish a partial JSON document.
+// save escribe en un archivo temporal restrictivo y lo renombra de forma atómica
+// sobre el destino, para que una escritura fallida no deje un JSON a medias.
 func (s *Store) save(name string, src any) error {
 	data, err := json.MarshalIndent(src, "", "  ")
 	if err != nil {

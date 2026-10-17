@@ -31,7 +31,7 @@ type Vehicle struct {
 	CreatedAt   string  `json:"created_at"`
 }
 
-// PublicVehicle is the catalog representation; it excludes private user data.
+// PublicVehicle es la representación del catálogo; excluye datos privados del usuario.
 type PublicVehicle struct {
 	Vehicle
 	Seller SellerContact `json:"seller"`
