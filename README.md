@@ -13,7 +13,7 @@ Todo corre en la máquina local: **sin base de datos, sin Docker, sin servidores
 
 ## Qué cumple el proyecto
 
-| Requisito | Dónde se implementa |
+| Requisito | Dónde se implementó |
 |---|---|
 | **HU-VIS-01** Consulta pública del catálogo con el contacto del vendedor | `GET /api/vehicles` (sin token) |
 | **HU-VEN-01** Registro, publicación (queda `pendiente`) y reporte de venta | `POST /api/auth/register`, `POST /api/vehicles`, `PUT /api/vehicles/:id/sold` |
@@ -53,9 +53,9 @@ $env:ADMIN_EMAIL = "admin@automarket.test"
 $env:ADMIN_PASSWORD = "Admin-demo-2026"
 ```
 
-- Son valores de ejemplo para la máquina local; **no los subas al repositorio**.
-- Valen solo para esa ventana de PowerShell: defínelas en la misma ventana donde ejecutas el servidor.
-- La cuenta se crea una sola vez; en los siguientes arranques se reutiliza.
+- Estos son solo valores de ejemplo para la máquina local.
+- Valen solo para la ventana de PowerShell en donde se estan usando: hay que definirlos en la misma ventana donde se ejecuta el servidor.
+- La cuenta se crea una sola vez; en los siguientes arranques se puede reutilizar.
 
 ## 4. Ejecutar
 
@@ -68,9 +68,9 @@ go run ./cmd/server
 
 - `go mod tidy` no debe modificar `go.mod` ni `go.sum` (`git diff go.mod go.sum` sale vacío).
 - `go test ./...` debe mostrar `ok` en cada paquete.
-- `go run ./cmd/server` deja el servidor corriendo en esa ventana. Para detenerlo: `Ctrl+C`.
+- `go run ./cmd/server` se debe dejar el servidor corriendo en esa ventana. Para detenerlo: `Ctrl+C`.
 
-Al arrancar se crea la carpeta `data/` con `users.json`, `vehicles.json` y `audit.json`. Está en `.gitignore` y no se sube al repositorio.
+Al arrancar se crea la carpeta `data/` con `users.json`, `vehicles.json` y `audit.json`. Está en `.gitignore`.
 
 La interfaz web (demo visual) está en **http://localhost:8080**. Es una página HTML que solo consume los endpoints de la API listados abajo; no agrega ninguno.
 
@@ -89,9 +89,9 @@ La interfaz web (demo visual) está en **http://localhost:8080**. Es una página
 
 Las rutas protegidas exigen la cabecera `Authorization: Bearer <token>`, con el token que devuelve el login.
 
-## 6. Cómo comprobar el código
+## 6. Comprobar el código
 
-Con el servidor corriendo en una ventana, abre una **segunda ventana de PowerShell** y pega primero este ayudante (en PowerShell `curl` es un alias de `Invoke-WebRequest`, por eso se usa `Invoke-RestMethod`):
+Con el servidor corriendo en una ventana, se debe abrir una **segunda ventana de PowerShell** y pegar primero este ayudante (en PowerShell `curl` es un alias de `Invoke-WebRequest`):
 
 ```powershell
 $BASE = "http://localhost:8080"
@@ -116,7 +116,7 @@ function Call($Method, $Path, $Token, $Body) {
 Call GET /api/vehicles
 ```
 
-Al principio devuelve `[]`.
+Inicialmente se devolvera: `[]`.
 
 ### HU-VEN-01 · Registro y publicación (estado pendiente)
 
@@ -140,7 +140,7 @@ Call PUT "/api/admin/vehicles/$idVeh/approve" $tokenAdmin
 Call GET /api/vehicles
 ```
 
-Pasa a `"status": "publicada"` y aparece en el catálogo con el nombre y el correo del vendedor. Usa en el login los mismos valores que definiste en las variables de entorno.
+Pasa a `"status": "publicada"` y aparece en el catálogo con el nombre y el correo del vendedor. Se debe usa en el login los mismos valores que se definieron en las variables de entorno.
 
 ### HU-VEN-01 · Reportar la venta
 
@@ -160,7 +160,7 @@ Call DELETE "/api/admin/users/<id-del-usuario>" $tokenAdmin
 
 El id del usuario sale de la respuesta del registro (`user.id`). Eliminar un usuario elimina también sus publicaciones.
 
-### AAA · Authentication (debe dar 401)
+### AAA · Authentication (401)
 
 ```powershell
 Call POST /api/vehicles $null @{ title = "x"; brand = "x"; model = "x"; price = 1 }
@@ -168,7 +168,7 @@ Call PUT "/api/admin/vehicles/$idVeh/approve" "token-inventado"
 Call POST /api/auth/login $null @{ email = "ana@demo.test"; password = "incorrecta" }
 ```
 
-### AAA · Authorization (debe dar 403)
+### AAA · Authorization (403)
 
 ```powershell
 Call PUT "/api/admin/vehicles/$idVeh/approve" $tokenAna
@@ -187,9 +187,9 @@ Get-Content data\audit.json
 
 - Las peticiones sin token aparecen como `anonimo` / `visitante`.
 - Una petición con token válido pero rol incorrecto aparece con el actor real y el código `403`.
-- **Integridad:** al arrancar, el servidor recalcula la cadena. Si alguien edita o borra una entrada intermedia, el servidor **se niega a arrancar** con el mensaje `cadena de auditoría alterada: entrada N`. Para probarlo: detén el servidor, cambia un valor en `audit.json` (por ejemplo un `status_response`) y vuelve a arrancar.
+- **Integridad:** al arrancar, el servidor recalcula la cadena. Si alguien edita o borra una entrada intermedia, el servidor **se niega a arrancar** con el mensaje `cadena de auditoría alterada: entrada N`. En caso de evaluación: Se debe detener el servidor, luego cambiar un valor en `audit.json` (por ejemplo un `status_response`) y finalmente volver a arrancar el servidor.
 
-Para reiniciar la demo desde cero: detén el servidor y borra la carpeta `data\` (se pierden usuarios, publicaciones y auditoría).
+Para reiniciar la demo desde cero: Se debe detener el servidor y borrar la carpeta `data\` (Esto elimina usuarios, publicaciones y auditoría).
 
 ```powershell
 Remove-Item -Recurse -Force data
@@ -217,7 +217,3 @@ internal/models/     entidades, constantes y errores de dominio
 web/templates/       interfaz HTML (demo visual)
 docs/                diagramas de estructura y de comportamiento (Mermaid)
 ```
-
-## 9. Declaración de uso responsable de IA
-
-El equipo utilizó asistentes de IA como apoyo en la revisión del cumplimiento del código frente a todos los requisitos del taller, la limpieza de código, la redacción de pruebas y de la guía de ejecución. Todo el código fue revisado, ejecutado y comprendido por los integrantes, quienes pueden explicarlo y defenderlo. Las decisiones de diseño y los límites de la solución son responsabilidad del equipo. No se incluyeron dependencias distintas de Gin. Además, la IA se utilizó, en última instancia, para crear el diseño de la interfaz web (`web/templates/index.html`).
